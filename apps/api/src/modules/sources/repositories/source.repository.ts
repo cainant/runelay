@@ -238,6 +238,28 @@ export const renameSource = ({ organizationId, name }: SourceKey, nextName: stri
 export const deleteSource = ({ organizationId, name }: SourceKey) =>
   write(() => db.query("DELETE FROM sources WHERE organization_id = ? AND name = ?").run(organizationId, name));
 
+export const rehashSourceUrls = (): Result<number> =>
+  attemptSync(() => {
+    const rows = db
+      .query<{ organizationId: string; name: string; config: string; urlHash: string | null }, []>(
+        "SELECT organization_id AS organizationId, name, config, url_hash AS urlHash FROM sources",
+      )
+      .all();
+    const update = db.query("UPDATE sources SET url_hash = ? WHERE organization_id = ? AND name = ?");
+    let changed = 0;
+    db.transaction(() => {
+      for (const row of rows) {
+        const config = unseal<SourceConfig>(row.config);
+        if (config.error) continue;
+        const urlHash = urlHashOf(config.data);
+        if (urlHash === row.urlHash) continue;
+        update.run(urlHash, row.organizationId, row.name);
+        changed += 1;
+      }
+    })();
+    return changed;
+  }, "STORAGE_FAILED");
+
 export const listInstalledByUrlHash = (organizationId: string, hashes: string[]): Result<InstalledSourceRow[]> =>
   attemptSync(
     () =>
