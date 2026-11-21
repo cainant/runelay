@@ -1039,7 +1039,7 @@ const runlayer = {
           ),
         ),
       ),
-      card("info", "About the name", prose("Runelay is written with an “e” after “run”. The project and the site are runelay.com and github.com/Andsu-dev/runelay. It has no relation to Runlayer and makes no claim about that product beyond what its own site states.")),
+      card("info", "About the name", prose("Runelay is written with an “e” after “run”. The project and the site are runelay.com and github.com/runelay/runelay. It has no relation to Runlayer and makes no claim about that product beyond what its own site states.")),
     ],
     faq: [
       ["Is Runelay related to Runlayer?", "No. They are separate projects from different authors. Runelay is an MIT licensed MCP gateway by Anderson Medeiros."],
@@ -1088,7 +1088,7 @@ const runlayer = {
           checks(["Está avaliando uma plataforma de governança de agentes para a empresa.", "Precisa de políticas, aprovações e scanners de segurança geridos por um fornecedor.", "Recebeu um link de runlayer.com ou docs.runlayer.com."], "dash"),
         ),
       ),
-      card("info", "Sobre o nome", prose("Runelay se escreve com “e” depois de “run”. O projeto e o site são runelay.com e github.com/Andsu-dev/runelay. Não tem relação com o Runlayer e não afirma nada sobre aquele produto além do que o próprio site dele diz.")),
+      card("info", "Sobre o nome", prose("Runelay se escreve com “e” depois de “run”. O projeto e o site são runelay.com e github.com/runelay/runelay. Não tem relação com o Runlayer e não afirma nada sobre aquele produto além do que o próprio site dele diz.")),
     ],
     faq: [
       ["O Runelay tem relação com o Runlayer?", "Não. São projetos separados, de autores diferentes. O Runelay é um gateway MCP com licença MIT, feito por Anderson Medeiros."],
