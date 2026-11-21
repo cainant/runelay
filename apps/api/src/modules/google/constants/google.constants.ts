@@ -92,3 +92,7 @@ export const GMAIL_METADATA_CONCURRENCY = 10;
 export const GOOGLE_REFRESH_MARGIN_MS = 60_000;
 
 export const GOOGLE_ERROR_PREVIEW = 500;
+
+export const GMAIL_SEARCH_DEFAULT = 10;
+
+export const GMAIL_SEARCH_MAX = 50;

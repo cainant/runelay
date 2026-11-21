@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Gmail
+
+- `gmail_reply` answers an email in the same thread, with `In-Reply-To`, `References` and "Re:". `replyAll` also copies the original To and Cc, leaving out the connected account.
+- `gmail_modify_labels` marks emails read or unread, archives them and adds or removes labels by name, creating missing ones. It needs `gmail.modify`.
+- `gmail_search_messages` searches individual messages (not threads) and returns each one's labels and whether it is unread.
+- The read tools also accept a connection with `gmail.modify` instead of `gmail.readonly`; their descriptions and the missing-scope error now say so.
+
 ## v0.6.8
 
 ### Connections

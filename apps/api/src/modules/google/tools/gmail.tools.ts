@@ -1,6 +1,12 @@
 import { fail, ok, type Result } from "@runelay/shared";
 import { z } from "zod";
-import { GMAIL_BODY_LIMIT, GMAIL_METADATA_CONCURRENCY, GOOGLE_API } from "@/modules/google/constants/google.constants";
+import {
+  GMAIL_BODY_LIMIT,
+  GMAIL_METADATA_CONCURRENCY,
+  GMAIL_SEARCH_DEFAULT,
+  GMAIL_SEARCH_MAX,
+  GOOGLE_API,
+} from "@/modules/google/constants/google.constants";
 import type { GoogleApi, GoogleRequest } from "@/modules/google/types/google.types";
 import { defineGoogleTool } from "@/modules/google/utils/google-tool";
 
@@ -25,13 +31,23 @@ interface GmailMessage {
   payload?: GmailPart;
 }
 
+interface GmailLabel {
+  id: string;
+  name?: string;
+  type?: string;
+}
+
 interface GmailThread {
   id: string;
   snippet?: string;
   messages?: GmailMessage[];
 }
 
-const READ_SCOPE = "Scope: gmail.readonly (connect with your own OAuth client).";
+const READ_SCOPE = "Scope: gmail.readonly or gmail.modify (connect with your own OAuth client).";
+
+const MODIFY_SCOPE = "Scope: gmail.modify (connect with your own OAuth client).";
+
+const REPLY_SCOPE = "Scopes: gmail.send plus gmail.modify or gmail.readonly (connect with your own OAuth client).";
 
 const INSUFFICIENT_SCOPE = /insufficient authentication scopes|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i;
 
@@ -55,12 +71,14 @@ export const buildRawMessage = (message: {
   cc?: string | string[];
   subject: string;
   body: string;
+  headers?: Record<string, string>;
 }) =>
   Buffer.from(
     [
       `To: ${headerValue(message.to)}`,
       ...(message.cc ? [`Cc: ${headerValue(message.cc)}`] : []),
       `Subject: ${encodeSubject(message.subject)}`,
+      ...Object.entries(message.headers ?? {}).map(([name, value]) => `${name}: ${headerValue(value)}`),
       "MIME-Version: 1.0",
       "Content-Type: text/plain; charset=UTF-8",
       "Content-Transfer-Encoding: base64",
@@ -150,15 +168,24 @@ export const readMessage = ({ id, threadId, labelIds, snippet, payload }: GmailM
   ...messageBody(payload),
 });
 
-const gmailRead = async <T>(api: GoogleApi, request: GoogleRequest): Promise<Result<T>> => {
+const gmailCall = async <T>(
+  api: GoogleApi,
+  request: GoogleRequest,
+  needs = "Reading Gmail needs the gmail.readonly or gmail.modify scope",
+): Promise<Result<T>> => {
   const result = await api<T>(request);
   if (!result.error || !INSUFFICIENT_SCOPE.test(result.error.message)) return result;
   return fail(
     "TOOL_FAILED",
-    `${result.error.message} Reading Gmail needs the gmail.readonly scope: reconnect Gmail with your own OAuth client and grant it.`,
+    `${result.error.message} ${needs}: reconnect Gmail with your own OAuth client and grant it.`,
     result.error.details,
   );
 };
+
+const gmailRead = <T>(api: GoogleApi, request: GoogleRequest) => gmailCall<T>(api, request);
+
+const gmailModify = <T>(api: GoogleApi, request: GoogleRequest) =>
+  gmailCall<T>(api, request, "Changing Gmail labels needs the gmail.modify scope");
 
 const threadUrl = (threadId: string) => `${GOOGLE_API.gmail}/threads/${encodeURIComponent(threadId)}`;
 
@@ -190,6 +217,63 @@ const summarize = async (api: GoogleApi, threads: GmailThread[]) => {
     summaries.push(...(await Promise.all(batch.map((thread) => threadSummary(api, thread)))));
   }
   return summaries;
+};
+
+const messageUrl = (messageId: string) => `${GOOGLE_API.gmail}/messages/${encodeURIComponent(messageId)}`;
+
+const messageMetadata = (api: GoogleApi, messageId: string) =>
+  gmailRead<GmailMessage>(api, { url: messageUrl(messageId), query: { format: "metadata" } });
+
+const messageSummary = ({ id, threadId, labelIds, snippet, payload }: GmailMessage) => ({
+  id,
+  threadId: threadId ?? null,
+  from: headerOf(payload, "From"),
+  to: headerOf(payload, "To"),
+  subject: headerOf(payload, "Subject"),
+  date: headerOf(payload, "Date"),
+  snippet: snippet ?? "",
+  labelIds: labelIds ?? [],
+  unread: (labelIds ?? []).includes("UNREAD"),
+});
+
+export const replySubject = (subject: string | null | undefined) => {
+  const base = (subject ?? "").trim();
+  return /^re:/i.test(base) ? base : `Re: ${base}`.trim();
+};
+
+// Splits an address header on commas outside quotes, so "Silva, Ana" <ana@x> stays whole.
+export const splitAddresses = (list: string | null | undefined) =>
+  (list ?? "")
+    .match(/(?:"[^"]*"|[^,])+/g)
+    ?.map((entry) => entry.trim())
+    .filter(Boolean) ?? [];
+
+export const addressOf = (entry: string) => (entry.match(/<([^>]+)>/)?.[1] ?? entry).trim().toLowerCase();
+
+const listLabels = (api: GoogleApi) => gmailRead<{ labels?: GmailLabel[] }>(api, { url: `${GOOGLE_API.gmail}/labels` });
+
+const resolveLabels = async (api: GoogleApi, names: string[], create: boolean): Promise<Result<string[]>> => {
+  if (names.length === 0) return ok([]);
+  const listed = await listLabels(api);
+  if (listed.error) return listed;
+  const labels = listed.data.labels ?? [];
+  const ids: string[] = [];
+  for (const name of names) {
+    const found = labels.find((label) => label.id === name || label.name?.toLowerCase() === name.toLowerCase());
+    if (found) {
+      ids.push(found.id);
+      continue;
+    }
+    if (!create) return fail("INVALID_INPUT", `Marcador não encontrado: ${name}`);
+    const created = await gmailModify<GmailLabel>(api, {
+      url: `${GOOGLE_API.gmail}/labels`,
+      method: "POST",
+      json: { name, labelListVisibility: "labelShow", messageListVisibility: "show" },
+    });
+    if (created.error) return created;
+    ids.push(created.data.id);
+  }
+  return ok(ids);
 };
 
 export const gmailTools = [
@@ -259,6 +343,113 @@ export const gmailTools = [
           type: type ?? null,
         })),
       });
+    },
+  }),
+  defineGoogleTool({
+    name: "search_messages",
+    description: `Search the mailbox with Gmail search syntax (e.g. "in:inbox is:unread", "from:ana@example.com newer_than:7d") and return id, threadId, from, to, subject, date, snippet and labels of each message, newest first. ${READ_SCOPE}`,
+    input: z.object({
+      query: z.string().default("in:inbox"),
+      maxResults: z.number().int().min(1).max(GMAIL_SEARCH_MAX).default(GMAIL_SEARCH_DEFAULT),
+      pageToken: z.string().optional(),
+      includeSpamTrash: z.boolean().default(false),
+    }),
+    run: async (api, { query, maxResults, pageToken, includeSpamTrash }) => {
+      const listed = await gmailRead<{
+        messages?: { id: string }[];
+        nextPageToken?: string;
+        resultSizeEstimate?: number;
+      }>(api, { url: `${GOOGLE_API.gmail}/messages`, query: { q: query, maxResults, pageToken, includeSpamTrash } });
+      if (listed.error) return listed;
+      const ids = (listed.data.messages ?? []).map((message) => message.id);
+      const messages: ReturnType<typeof messageSummary>[] = [];
+      for (let start = 0; start < ids.length; start += GMAIL_METADATA_CONCURRENCY) {
+        const batch = ids.slice(start, start + GMAIL_METADATA_CONCURRENCY);
+        const found = await Promise.all(batch.map((id) => messageMetadata(api, id)));
+        for (const result of found) {
+          if (result.error) return result;
+          messages.push(messageSummary(result.data));
+        }
+      }
+      return ok({
+        messages,
+        nextPageToken: listed.data.nextPageToken ?? null,
+        resultSizeEstimate: listed.data.resultSizeEstimate ?? 0,
+      });
+    },
+  }),
+  defineGoogleTool({
+    name: "reply",
+    description: `Reply in plain text to an email, in the same thread: goes to Reply-To (or From) of the original, keeps the subject with "Re:" and sets In-Reply-To and References. replyAll also copies the original To and Cc, except the connected account. ${REPLY_SCOPE}`,
+    input: z.object({
+      messageId: z.string().min(1),
+      body: z.string().min(1),
+      replyAll: z.boolean().default(false),
+      cc: recipients.optional(),
+    }),
+    run: async (api, input) => {
+      const original = await messageMetadata(api, input.messageId);
+      if (original.error) return original;
+      const { payload, threadId } = original.data;
+      const to = headerOf(payload, "Reply-To") ?? headerOf(payload, "From");
+      if (!to) return fail("TOOL_FAILED", "A mensagem original não tem remetente para responder.");
+      const me = input.replyAll ? await api<{ emailAddress?: string }>({ url: `${GOOGLE_API.gmail}/profile` }) : null;
+      const skip = new Set([
+        addressOf(to),
+        ...(me && !me.error && me.data.emailAddress ? [addressOf(me.data.emailAddress)] : []),
+      ]);
+      const others = input.replyAll
+        ? [...splitAddresses(headerOf(payload, "To")), ...splitAddresses(headerOf(payload, "Cc"))].filter((entry) => {
+            const address = addressOf(entry);
+            if (skip.has(address)) return false;
+            skip.add(address);
+            return true;
+          })
+        : [];
+      const cc = [...others, ...[input.cc ?? []].flat()];
+      const messageIdHeader = headerOf(payload, "Message-ID");
+      const references = [headerOf(payload, "References"), messageIdHeader].filter(Boolean).join(" ");
+      const raw = buildRawMessage({
+        to,
+        cc: cc.length ? cc : undefined,
+        subject: replySubject(headerOf(payload, "Subject")),
+        body: input.body,
+        headers: messageIdHeader ? { "In-Reply-To": messageIdHeader, References: references } : undefined,
+      });
+      return api({ url: GOOGLE_API.gmailSend, method: "POST", json: { raw, threadId } });
+    },
+  }),
+  defineGoogleTool({
+    name: "modify_labels",
+    description: `Change labels of one or more emails: mark as read or unread, archive (take out of the inbox), and add or remove labels by name or id (missing labels are created when createMissing is true). ${MODIFY_SCOPE}`,
+    input: z.object({
+      messageIds: z.array(z.string().min(1)).min(1).max(1000),
+      markRead: z.boolean().optional(),
+      archive: z.boolean().optional(),
+      addLabels: z.array(z.string().min(1)).default([]),
+      removeLabels: z.array(z.string().min(1)).default([]),
+      createMissing: z.boolean().default(true),
+    }),
+    run: async (api, input) => {
+      const added = await resolveLabels(api, input.addLabels, input.createMissing);
+      if (added.error) return added;
+      const removed = await resolveLabels(api, input.removeLabels, false);
+      if (removed.error) return removed;
+      const addLabelIds = [...added.data, ...(input.markRead === false ? ["UNREAD"] : [])];
+      const removeLabelIds = [
+        ...removed.data,
+        ...(input.markRead ? ["UNREAD"] : []),
+        ...(input.archive ? ["INBOX"] : []),
+      ];
+      if (addLabelIds.length === 0 && removeLabelIds.length === 0) {
+        return fail("INVALID_INPUT", "Nada para mudar: use markRead, archive, addLabels ou removeLabels.");
+      }
+      const done = await gmailModify(api, {
+        url: `${GOOGLE_API.gmail}/messages/batchModify`,
+        method: "POST",
+        json: { ids: input.messageIds, addLabelIds, removeLabelIds },
+      });
+      return done.error ? done : ok({ modified: input.messageIds.length, addLabelIds, removeLabelIds });
     },
   }),
 ];
