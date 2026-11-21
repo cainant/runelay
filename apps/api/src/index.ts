@@ -3,8 +3,10 @@ import { env } from "@/config/env";
 import { migrateAuth } from "@/modules/auth/lib/migrate-auth";
 import { setupUrl } from "@/modules/auth/lib/setup-token";
 import { countUsers } from "@/modules/auth/repositories/user.repository";
+import { rehashSourceUrls } from "@/modules/sources/repositories/source.repository";
 
 await migrateAuth();
+rehashSourceUrls();
 
 Bun.serve({ hostname: env.HOST, port: env.PORT, idleTimeout: 0, fetch: app.fetch });
 
