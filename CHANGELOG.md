@@ -9,6 +9,10 @@
 - `gmail_search_messages` searches individual messages (not threads) and returns each one's labels and whether it is unread.
 - The read tools also accept a connection with `gmail.modify` instead of `gmail.readonly`; their descriptions and the missing-scope error now say so.
 
+### Desktop
+
+- On macOS, the menu bar icon's menu has **Mostrar no Dock**. Turn it off and the app leaves the Dock and the app switcher (Cmd+Tab) but keeps running in the menu bar. The choice survives updates.
+
 ## v0.6.8
 
 ### Connections
