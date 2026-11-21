@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-REPO="Andsu-dev/runelay"
+REPO="runelay/runelay"
 INSTALL_DIR="${RUNELAY_DIR:-$HOME/runelay}"
 VERSION="${RUNELAY_VERSION:-latest}"
 PORT="${RUNELAY_PORT:-4312}"

@@ -45,7 +45,7 @@ describe("version", () => {
     withUpdater();
     const spy = release("v99.0.0", {
       body: "  - New things\n",
-      html_url: "https://github.com/Andsu-dev/runelay/releases/tag/v99.0.0",
+      html_url: "https://github.com/runelay/runelay/releases/tag/v99.0.0",
     });
     const first = await body<VersionView>(await call("/v1/system/version", { cookie: owner.cookie }));
     await call("/v1/system/version", { cookie: owner.cookie });
@@ -53,7 +53,7 @@ describe("version", () => {
       current: GATEWAY_INFO.version,
       latest: "99.0.0",
       notes: "- New things",
-      releaseUrl: "https://github.com/Andsu-dev/runelay/releases/tag/v99.0.0",
+      releaseUrl: "https://github.com/runelay/runelay/releases/tag/v99.0.0",
       updateAvailable: true,
       canUpdate: true,
       desktop: false,

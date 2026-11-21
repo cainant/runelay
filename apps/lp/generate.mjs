@@ -402,8 +402,8 @@ const changelog = () => {
     h1: "Changelog",
     lead:
       lang === "en"
-        ? `Every release of Runelay, an open source MCP gateway. Installers and binaries are on <a href="https://github.com/Andsu-dev/runelay/releases" rel="noopener">GitHub releases</a>.`
-        : `Todas as versões do Runelay, gateway MCP open source. As notas são escritas em inglês. Instaladores e binários ficam nos <a href="https://github.com/Andsu-dev/runelay/releases" rel="noopener">releases do GitHub</a>.`,
+        ? `Every release of Runelay, an open source MCP gateway. Installers and binaries are on <a href="https://github.com/runelay/runelay/releases" rel="noopener">GitHub releases</a>.`
+        : `Todas as versões do Runelay, gateway MCP open source. As notas são escritas em inglês. Instaladores e binários ficam nos <a href="https://github.com/runelay/runelay/releases" rel="noopener">releases do GitHub</a>.`,
     cardTitle: "Changelog",
     cardText: lang === "en" ? "What changed in each release." : "O que mudou em cada versão.",
     body: releases,

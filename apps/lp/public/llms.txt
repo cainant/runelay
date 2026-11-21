@@ -62,7 +62,7 @@
 
 - [README](https://raw.githubusercontent.com/runelay/runelay/main/README.md): full documentation, configuration, environment variables, security model, MCP tools and REST API.
 - [Changelog](https://runelay.com/changelog/): what changed in each release.
-- [Releases](https://github.com/Andsu-dev/runelay/releases): installers, CLI binaries and `compose.yaml`.
+- [Releases](https://github.com/runelay/runelay/releases): installers, CLI binaries and `compose.yaml`.
 
 ## MCP tools
 
