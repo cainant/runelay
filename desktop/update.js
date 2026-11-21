@@ -1,5 +1,5 @@
-const RELEASE_URL = "https://api.github.com/repos/Andsu-dev/runelay/releases/latest";
-const DOWNLOAD_PREFIX = "https://github.com/Andsu-dev/runelay/releases/download/";
+const RELEASE_URL = "https://api.github.com/repos/runelay/runelay/releases/latest";
+const DOWNLOAD_PREFIX = "https://github.com/runelay/runelay/releases/download/";
 const RELEASE_TIMEOUT_MS = 10_000;
 
 const ASSETS = {

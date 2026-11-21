@@ -1,6 +1,6 @@
 services:
   runelay:
-    image: ghcr.io/andsu-dev/runelay:${RUNELAY_VERSION:-latest}
+    image: ghcr.io/runelay/runelay:${RUNELAY_VERSION:-latest}
     restart: unless-stopped
     env_file: .env
     environment:

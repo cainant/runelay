@@ -59,7 +59,7 @@ for (const button of document.querySelectorAll("[data-copy], [data-copy-from]"))
 
 const versionSlots = document.querySelectorAll("[data-version]");
 if (versionSlots.length) {
-  fetch("https://api.github.com/repos/Andsu-dev/runelay/releases/latest")
+  fetch("https://api.github.com/repos/runelay/runelay/releases/latest")
     .then((response) => (response.ok ? response.json() : null))
     .then((release) => {
       if (!release?.tag_name) return;

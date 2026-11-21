@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-REPO="Andsu-dev/runelay"
+REPO="runelay/runelay"
 VERSION="${RUNELAY_VERSION:-latest}"
 INSTALL_DIR="${RUNELAY_INSTALL_DIR:-$HOME/.runelay/bin}"
 

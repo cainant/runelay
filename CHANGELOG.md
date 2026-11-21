@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Desktop
+
+- The update check looks for releases in `runelay/runelay`. Since the repository moved to the organization, apps up to v0.6.9 no longer find new versions on their own: install this one from the releases page once and updates work again.
+
+### Self-hosting
+
+- `compose.yaml`, the install scripts and the docs point to `runelay/runelay` and the `ghcr.io/runelay/runelay` image.
+
 ## v0.6.9
 
 ### Gmail
