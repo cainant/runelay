@@ -1,5 +1,0 @@
-{
-  "title": "Migrate from your agents",
-  "icon": "ArrowRightLeft",
-  "pages": ["index", "claude-code", "codex", "cursor", "grok", "gemini", "opencode"]
-}
