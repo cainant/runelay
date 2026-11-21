@@ -2,7 +2,14 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { Tool } from "@/modules/connectors/types/connector.types";
 import { connectGoogle } from "@/modules/google/clients/google.client";
 import { GOOGLE_SERVICES } from "@/modules/google/constants/google.constants";
-import { buildRawMessage, messageBody, readMessage } from "@/modules/google/tools/gmail.tools";
+import {
+  addressOf,
+  buildRawMessage,
+  messageBody,
+  readMessage,
+  replySubject,
+  splitAddresses,
+} from "@/modules/google/tools/gmail.tools";
 import { scopesFor } from "@/modules/google/utils/google-scopes";
 import { updateOAuth, upsertSource } from "@/modules/sources/repositories/source.repository";
 import { type FakeGoogle, startFakeGoogle } from "../../../../../test/google-helpers";
@@ -44,7 +51,7 @@ const run = (name: string, args: Record<string, unknown> = {}) => {
 const json = (body: string) => JSON.parse(body) as Record<string, unknown>;
 
 test("every REST tool has a described input schema", () => {
-  expect(tools.size).toBe(31);
+  expect(tools.size).toBe(34);
   for (const tool of tools.values()) {
     expect(tool.source).toBe("google");
     expect(tool.description).toMatch(/Scopes?: /);
@@ -735,6 +742,7 @@ test("gmail read tools explain a missing gmail.readonly scope", async () => {
   expect(denied.error?.code).toBe("TOOL_FAILED");
   expect(denied.error?.message).toContain("Google: Request had insufficient authentication scopes.");
   expect(denied.error?.message).toContain("gmail.readonly");
+  expect(denied.error?.message).toContain("gmail.modify");
   expect(denied.error?.message).toContain("own OAuth client");
   expect(tools.get("gmail_search_threads")?.description).toContain("Scope: gmail.readonly");
 });
@@ -824,6 +832,112 @@ test("gmail message bodies fall back to HTML as text, honor the charset and get 
   });
   expect(messageBody(undefined)).toEqual({ body: "", truncated: false });
   expect(readMessage({ id: "m9" })).toMatchObject({ id: "m9", threadId: null, subject: null, labelIds: [], body: "" });
+});
+
+const gmailMessage = (id: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  threadId: "t1",
+  labelIds: ["INBOX", "UNREAD"],
+  snippet: `trecho ${id}`,
+  payload: {
+    mimeType: "multipart/mixed",
+    headers: [
+      { name: "From", value: "Ana <ana@example.com>" },
+      { name: "To", value: "contato@moradah.com.br, outra@example.com" },
+      { name: "Subject", value: "Dúvida" },
+      { name: "Date", value: "Thu, 19 Nov 2026 10:00:00 -0300" },
+      { name: "Message-ID", value: `<${id}@mail.example.com>` },
+    ],
+    parts: [
+      {
+        mimeType: "multipart/alternative",
+        parts: [
+          { mimeType: "text/plain", body: { data: b64("Olá, tudo bem?") } },
+          { mimeType: "text/html", body: { data: b64("<p>Olá, <b>tudo</b> bem?</p>") } },
+        ],
+      },
+      { mimeType: "application/pdf", filename: "nota.pdf", body: { size: 10, attachmentId: "att1" } },
+    ],
+  },
+  ...extra,
+});
+
+test("gmail_search_messages lists and summarizes messages", async () => {
+  google.routes.set("GET gmail.googleapis.com/gmail/v1/users/me/messages", () => ({
+    body: { messages: [{ id: "m1" }, { id: "m2" }], nextPageToken: "n2", resultSizeEstimate: 2 },
+  }));
+  google.routes.set("GET gmail.googleapis.com/gmail/v1/users/me/messages/m1", () => ({ body: gmailMessage("m1") }));
+  google.routes.set("GET gmail.googleapis.com/gmail/v1/users/me/messages/m2", () => ({ body: gmailMessage("m2") }));
+  const result = await run("gmail_search_messages", { query: "in:inbox is:unread", maxResults: 2 });
+  const data = result.data as { messages: Record<string, unknown>[]; nextPageToken: string };
+  expect(data.nextPageToken).toBe("n2");
+  expect(data.messages).toHaveLength(2);
+  expect(data.messages[0]).toMatchObject({ id: "m1", from: "Ana <ana@example.com>", subject: "Dúvida", unread: true });
+  const listed = google.requests.find((r) => r.path === "/gmail/v1/users/me/messages");
+  expect(listed?.query.get("q")).toBe("in:inbox is:unread");
+  expect(listed?.query.get("maxResults")).toBe("2");
+  expect(google.last().query.get("format")).toBe("metadata");
+  expect((await run("gmail_search_messages", { maxResults: 999 })).error?.code).toBe("INVALID_INPUT");
+});
+
+test("gmail_reply answers in the same thread with the reply headers", async () => {
+  google.routes.set("GET gmail.googleapis.com/gmail/v1/users/me/messages/m1", () => ({ body: gmailMessage("m1") }));
+  google.routes.set("GET gmail.googleapis.com/gmail/v1/users/me/profile", () => ({
+    body: { emailAddress: "contato@moradah.com.br" },
+  }));
+  google.routes.set("POST gmail.googleapis.com/gmail/v1/users/me/messages/send", () => ({ body: { id: "r1" } }));
+  const result = await run("gmail_reply", { messageId: "m1", body: "Oi, Ana!", replyAll: true });
+  expect(result.data).toEqual({ id: "r1" });
+  const sent = json(google.last().body) as { raw: string; threadId: string };
+  expect(sent.threadId).toBe("t1");
+  const message = Buffer.from(sent.raw, "base64url").toString();
+  expect(message).toStartWith("To: Ana <ana@example.com>\r\nCc: outra@example.com\r\n");
+  expect(message).toContain("In-Reply-To: <m1@mail.example.com>\r\nReferences: <m1@mail.example.com>\r\n");
+  const subject = message.match(/Subject: =\?UTF-8\?B\?([^?]+)\?=/)?.[1] ?? "";
+  expect(Buffer.from(subject, "base64").toString()).toBe("Re: Dúvida");
+  expect(replySubject("RE: Oi")).toBe("RE: Oi");
+  expect(replySubject(undefined)).toBe("Re:");
+});
+
+test("gmail_reply splits address lists outside quotes and skips the account and duplicates", () => {
+  expect(splitAddresses('"Silva, Ana" <ana@example.com>, bia@example.com')).toEqual([
+    '"Silva, Ana" <ana@example.com>',
+    "bia@example.com",
+  ]);
+  expect(splitAddresses(null)).toEqual([]);
+  expect(addressOf("Ana <Ana@Example.com>")).toBe("ana@example.com");
+  expect(addressOf(" bia@example.com ")).toBe("bia@example.com");
+});
+
+test("gmail_modify_labels marks read, archives and creates missing labels", async () => {
+  google.routes.set("GET gmail.googleapis.com/gmail/v1/users/me/labels", () => ({
+    body: {
+      labels: [
+        { id: "INBOX", name: "INBOX", type: "system" },
+        { id: "L1", name: "Atendido", type: "user" },
+      ],
+    },
+  }));
+  google.routes.set("POST gmail.googleapis.com/gmail/v1/users/me/labels", () => ({
+    body: { id: "L2", name: "Black" },
+  }));
+  google.routes.set("POST gmail.googleapis.com/gmail/v1/users/me/messages/batchModify", () => ({ text: "" }));
+  const result = await run("gmail_modify_labels", {
+    messageIds: ["m1", "m2"],
+    markRead: true,
+    archive: true,
+    addLabels: ["atendido", "Black"],
+  });
+  expect(result.data).toEqual({ modified: 2, addLabelIds: ["L1", "L2"], removeLabelIds: ["UNREAD", "INBOX"] });
+  expect(json(google.last().body)).toEqual({
+    ids: ["m1", "m2"],
+    addLabelIds: ["L1", "L2"],
+    removeLabelIds: ["UNREAD", "INBOX"],
+  });
+  expect((await run("gmail_modify_labels", { messageIds: ["m1"] })).error?.code).toBe("INVALID_INPUT");
+  expect((await run("gmail_modify_labels", { messageIds: ["m1"], removeLabels: ["Nope"] })).error?.code).toBe(
+    "INVALID_INPUT",
+  );
 });
 
 test("forms_create_form creates the form and sets the description", async () => {
