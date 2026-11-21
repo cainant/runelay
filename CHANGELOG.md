@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Desktop
+
+- On macOS, the menu bar icon's menu has **Mostrar no Dock**. Turn it off and the app leaves the Dock and the app switcher (Cmd+Tab) but keeps running in the menu bar. The choice survives updates.
+
 ## v0.6.8
 
 ### Connections

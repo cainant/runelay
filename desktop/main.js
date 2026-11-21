@@ -998,7 +998,11 @@ const createWindow = async (url) => {
     event.preventDefault();
     shell.openExternal(target);
   });
-  window.once("ready-to-show", () => (handoff ? handoff.ready.resolve() : window?.show()));
+  window.once("ready-to-show", () => {
+    if (handoff) return handoff.ready.resolve();
+    window?.show();
+    focusApp();
+  });
   window.on("closed", () => {
     window = null;
   });
@@ -1024,6 +1028,7 @@ const completeHandoff = async () => {
   if (window && !window.isDestroyed()) {
     window.setOpacity(0);
     window.show();
+    focusApp();
   }
   await Promise.all([fade(chooser, 1, 0), fade(window, 0, 1)]);
   window?.setOpacity(1);
@@ -1035,6 +1040,7 @@ const showWindow = async () => {
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
+    focusApp();
     return;
   }
   if (!home) return;
@@ -1090,6 +1096,55 @@ const skillStatusLabel = () => {
   return skillSync?.watching() ? "Skills: aguardando mudanças" : "Skills: nenhuma pasta encontrada";
 };
 
+// macOS only: while the menu bar icon exists, the app can leave the Dock and
+// the app switcher (Cmd+Tab) and live in the menu bar alone.
+const dockHidden = () => process.platform === "darwin" && Boolean(tray) && readPrefs().hideDock === true;
+
+const applyDock = () => {
+  if (process.platform !== "darwin" || !app.dock) return;
+  if (dockHidden()) return app.dock.hide();
+  app.dock.show().catch(() => {});
+};
+
+// Without a Dock icon the app is not activated when its window shows, so the
+// window would open behind the app in front.
+const focusApp = () => {
+  if (dockHidden()) app.focus({ steal: true });
+};
+
+// Opening the app again from Finder or Spotlight while it runs puts it back in
+// the Dock; take it out again and keep its window in front.
+const keepOutOfDock = () => {
+  if (!dockHidden() || !app.dock.isVisible()) return;
+  app.dock.hide();
+  focusApp();
+};
+
+const setDockVisible = (visible) => {
+  const shown = Boolean(window) && !window.isDestroyed() && window.isVisible();
+  writePrefs({ hideDock: !visible });
+  applyDock();
+  refreshTrayMenu();
+  // Leaving the Dock deactivates the app; bring an open window back to the front.
+  if (shown && !visible) {
+    window.show();
+    focusApp();
+  }
+};
+
+const dockMenuItems = () =>
+  process.platform === "darwin"
+    ? [
+        {
+          label: "Mostrar no Dock",
+          type: "checkbox",
+          checked: !dockHidden(),
+          click: (item) => setDockVisible(item.checked),
+        },
+        { type: "separator" },
+      ]
+    : [];
+
 const trayMenu = () =>
   Menu.buildFromTemplate([
     { label: "Abrir runelay", click: () => showWindow() },
@@ -1097,6 +1152,7 @@ const trayMenu = () =>
     { type: "separator" },
     ...skillMenuItems(),
     { type: "separator" },
+    ...dockMenuItems(),
     { label: "Sair", click: () => app.quit() },
   ]);
 
@@ -1112,6 +1168,7 @@ const createTray = () => {
   tray.setContextMenu(trayMenu());
   tray.on("click", () => showWindow());
   Menu.setApplicationMenu(buildMenu());
+  applyDock();
 };
 
 const startSkillSync = () => {
@@ -1149,6 +1206,7 @@ const syncRemoteTray = () => {
   tray?.destroy();
   tray = null;
   Menu.setApplicationMenu(buildMenu());
+  applyDock();
 };
 
 const notifyBackground = () => {
@@ -1321,7 +1379,10 @@ app.whenReady().then(async () => {
   return openLocal(hidden);
 });
 
+app.on("did-become-active", keepOutOfDock);
+
 app.on("activate", async () => {
+  keepOutOfDock();
   if (!window && home) await showWindow();
 });
 
