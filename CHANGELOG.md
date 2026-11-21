@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.6.9
+
 ### Gmail
 
 - `gmail_reply` answers an email in the same thread, with `In-Reply-To`, `References` and "Re:". `replyAll` also copies the original To and Cc, leaving out the connected account.
@@ -12,6 +14,10 @@
 ### Desktop
 
 - On macOS, the menu bar icon's menu has **Mostrar no Dock**. Turn it off and the app leaves the Dock and the app switcher (Cmd+Tab) but keeps running in the menu bar. The choice survives updates.
+
+### Self-hosting
+
+- The Docker image builds on Bun 1.4.4. Dependency updates, including Hono 4.13 and fumadocs 16.19.4 for the docs.
 
 ## v0.6.8
 
