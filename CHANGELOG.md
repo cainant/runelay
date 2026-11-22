@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.6.10
+
+### Security
+
+- Connection URL hashes stored in the database are now keyed with `RUNELAY_SECRET` (HMAC-SHA256) instead of a plain SHA-256, so a URL that carries a token can't be guessed from the database file alone. Existing rows are rehashed on startup.
+
 ### Desktop
 
 - The update check looks for releases in `runelay/runelay`. Since the repository moved to the organization, apps up to v0.6.9 no longer find new versions on their own: install this one from the releases page once and updates work again.
