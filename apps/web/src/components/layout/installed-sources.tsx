@@ -13,10 +13,11 @@ import { PanelSection } from "./panel-section";
 const PLACEHOLDERS = [0, 1, 2];
 
 const groupByConnector = (sources: SourceView[]) => {
-  const groups = new Map<string, SourceView[]>();
+  const groups = new Map<string, [SourceView, ...SourceView[]]>();
   for (const source of sources) {
     const base = source.name.replace(/_\d+$/, "");
-    groups.set(base, [...(groups.get(base) ?? []), source]);
+    const items = groups.get(base);
+    groups.set(base, items ? [...items, source] : [source]);
   }
   return [...groups].map(([name, items]) => ({ name, items }));
 };

@@ -10,13 +10,13 @@ import { InstalledSourceLink } from "./installed-source-link";
 
 interface InstalledSourceGroupProps {
   name: string;
-  sources: SourceView[];
+  sources: [SourceView, ...SourceView[]];
   onNavigate?: () => void;
 }
 
 const STATUS_WEIGHT = { error: 3, needs_auth: 2, idle: 1, ok: 0 } as const;
 
-const worstSource = (sources: SourceView[]) =>
+const worstSource = (sources: [SourceView, ...SourceView[]]) =>
   sources.reduce((worst, source) => {
     if (!source.enabled) return worst;
     if (!worst.enabled) return source;
