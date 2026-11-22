@@ -1,3 +1,4 @@
+import type { SourceView } from "@runelay/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
@@ -5,10 +6,20 @@ import { Skeleton } from "@/components/ui/display/skeleton";
 import { UI_SPRING } from "@/components/ui/display/spring";
 import { useT } from "@/lib/i18n";
 import { sourcesQuery } from "@/modules/sources/api/sources.api";
+import { InstalledSourceGroup } from "./installed-source-group";
 import { InstalledSourceLink } from "./installed-source-link";
 import { PanelSection } from "./panel-section";
 
 const PLACEHOLDERS = [0, 1, 2];
+
+const groupByConnector = (sources: SourceView[]) => {
+  const groups = new Map<string, SourceView[]>();
+  for (const source of sources) {
+    const base = source.name.replace(/_\d+$/, "");
+    groups.set(base, [...(groups.get(base) ?? []), source]);
+  }
+  return [...groups].map(([name, items]) => ({ name, items }));
+};
 
 interface InstalledSourcesProps {
   onNavigate?: () => void;
@@ -32,9 +43,9 @@ export function InstalledSources({ onNavigate }: InstalledSourcesProps) {
       )}
       <ul className="flex flex-col gap-0.5">
         <AnimatePresence initial={false}>
-          {sources?.map((source) => (
+          {groupByConnector(sources ?? []).map((group) => (
             <motion.li
-              key={source.name}
+              key={group.name}
               layout
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -42,7 +53,11 @@ export function InstalledSources({ onNavigate }: InstalledSourcesProps) {
               transition={{ ...UI_SPRING, mass: 0.7 }}
               className="overflow-hidden"
             >
-              <InstalledSourceLink source={source} onNavigate={onNavigate} />
+              {group.items.length > 1 ? (
+                <InstalledSourceGroup name={group.name} sources={group.items} onNavigate={onNavigate} />
+              ) : (
+                <InstalledSourceLink source={group.items[0]} onNavigate={onNavigate} />
+              )}
             </motion.li>
           ))}
         </AnimatePresence>
